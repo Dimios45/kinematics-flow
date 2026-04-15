@@ -1,0 +1,10 @@
+[tools]
+python = "3.11"
+uv = "latest"
+
+[settings]
+python.uv_venv_auto = true
+
+[env]
+_.python.venv = { path = ".venv" }
+PYGLFW_LIBRARY = "/usr/lib/x86_64-linux-gnu/libglfw.so.3"

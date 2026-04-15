@@ -1,0 +1,15 @@
+# Copyright (c) 2025 Robert Bosch GmbH
+# SPDX-License-Identifier: AGPL-3.0
+
+name: "VXGripper"
+id: "vx300"
+qpos: [0.057, -0.057] # range +-0.021 +-0.057
+qpos_close: [0.021, -0.021] # close
+grasp_type: "default"
+grasp_sampler: "Antipodal"
+
+segmentation:
+  left_finger: [6]
+  right_finger: [16]
+  body: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+eta: 7000

@@ -1,0 +1,14 @@
+# Copyright (c) 2025 Robert Bosch GmbH
+# SPDX-License-Identifier: AGPL-3.0
+
+defaults:
+  - _self_
+  - env: clutter_table
+  - gripper: panda
+
+num_images: 10
+id: 0
+
+hydra:
+  job:
+    chdir: False

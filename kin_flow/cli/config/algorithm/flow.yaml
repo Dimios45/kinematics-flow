@@ -1,0 +1,19 @@
+# Copyright (c) 2026 Robert Bosch GmbH
+# SPDX-License-Identifier: AGPL-3.0
+
+name: "Flow"
+
+position_scaling: 10.0
+train:
+  position_scaling: ${..position_scaling}
+
+input_target:
+  position_scaling: ${..position_scaling}
+  gripper: ${gripper}
+
+inference:
+  gripper_id: ${oc.select:gripper_id, null}
+  z0_id: ${oc.select:z0_id, null}
+  integrator_steps: 20
+  position_scaling: ${..position_scaling}
+  gripper: ${gripper}

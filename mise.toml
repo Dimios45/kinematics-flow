@@ -1,0 +1,12 @@
+[tools]
+python = "3.11.13"
+uv = "latest"
+
+[settings]
+python.uv_venv_auto = true
+
+[env]
+_.python.venv = { path = ".venv" }
+PYGLFW_LIBRARY = "{{ config_root }}/.venv/lib/python3.11/site-packages/glfw/x11/libglfw.so"
+LD_LIBRARY_PATH = "{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/cublas/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib:{{ get_env(name='LD_LIBRARY_PATH', default='') }}"
+MUJOCO_GL = "egl"

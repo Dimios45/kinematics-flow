@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kinematics-flow"
+dynamic = ["version"]
+authors = [
+  { name = "Roman Freiberg", email = "me@romanfreiberg.com" }
+]
+description = "Kinematics-Flow Implementation"
+readme = { file = "README.md", content-type = "text/markdown" }
+keywords = ["grasping", "jax", "equivariance", "multi-embodiment"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Operating System :: POSIX :: Linux",
+]
+requires-python = ">=3.11"
+
+dependencies = [
+  "jax[cuda]==0.7.0",
+  "flax==0.10.7",
+  "e3nn_jax==0.20.7",
+  "sympy==1.13.1",
+  "hydra-core==1.3.2",
+  "plotly",
+  "tqdm==4.67.1",
+  "cuequivariance==0.7.0",
+  "cuequivariance-jax==0.7.0",
+  "cuequivariance-ops-jax-cu12==0.7.0",
+  "mj-grasp-sim",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "debugpy",
+  "isort",
+  "black"
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["kin_flow", "kin_flow.*", "scripts"]
+
+[tool.setuptools.dynamic]
+version = { attr = "kin_flow.__init__.__version__" }
+
+[tool.uv.sources]
+mj-grasp-sim = { path = "./thrd_party/mj-grasp-sim", editable = true }
+
+[tool.ty.environment]
+extra-paths = ["./thrd_party/mj-grasp-sim"]
+
+[dependency-groups]
+dev = [
+    "debugpy>=1.8.20",
+    "ty",
+]
+
