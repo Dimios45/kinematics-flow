@@ -1,0 +1,13 @@
+# Produced by deploy.calibrate — example values only (camera 0.8 m in front,
+# pitched 40 deg down at the workspace center; robot base 0.5 m behind origin).
+# p_world = T_world_cam @ p_cam ; p_base = T_base_world @ p_world
+T_world_cam:
+- [-1.0,  0.0,       0.0,       0.0]
+- [ 0.0, -0.643,     0.766,    -0.613]
+- [ 0.0,  0.766,     0.643,     0.514]
+- [ 0.0,  0.0,       0.0,       1.0]
+T_base_world:
+- [1.0, 0.0, 0.0,  0.5]
+- [0.0, 1.0, 0.0,  0.0]
+- [0.0, 0.0, 1.0,  0.0]
+- [0.0, 0.0, 0.0,  1.0]

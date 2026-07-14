@@ -8,5 +8,5 @@ python.uv_venv_auto = true
 [env]
 _.python.venv = { path = ".venv" }
 PYGLFW_LIBRARY = "{{ config_root }}/.venv/lib/python3.11/site-packages/glfw/x11/libglfw.so"
-LD_LIBRARY_PATH = "{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/cublas/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/nvidia/nvjitlink/lib:{{ get_env(name='LD_LIBRARY_PATH', default='') }}"
+LD_LIBRARY_PATH = "{{ config_root }}/.rocm-shim:{{ config_root }}/.venv/lib/python3.11/site-packages/_rocm_sdk_core/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/_rocm_sdk_core/lib/rocm_sysdeps/lib:{{ config_root }}/.venv/lib/python3.11/site-packages/_rocm_sdk_libraries_gfx94X_dcgpu/lib:{{ get_env(name='LD_LIBRARY_PATH', default='') }}"
 MUJOCO_GL = "egl"

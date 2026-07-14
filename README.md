@@ -36,6 +36,58 @@ export LD_LIBRARY_PATH="${CUDA_LIBS}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 export MUJOCO_GL="egl"
 ```
 
+### AMD ROCm (MI300X) setup
+
+This checkout has been adapted to run on AMD Instinct GPUs (tested: 8× MI300X, gfx942,
+host ROCm 6.2.4 kernel driver, no sudo needed). `pyproject.toml` was changed to
+`jax==0.8.0`, `flax==0.11.2`, and the NVIDIA-only `cuequivariance-ops-jax-cu12` was
+dropped (the model only uses the pure-XLA `method="naive"` path). Install with:
+
+```bash
+uv venv --python 3.11
+uv pip install --prerelease=allow \
+  --extra-index-url "https://rocm.nightlies.amd.com/v2/gfx94X-dcgpu/" \
+  --index-strategy unsafe-best-match \
+  "jax==0.8.0" \
+  "jax-rocm7-plugin==0.8.0+rocm7.13.0a20260421" \
+  "jax-rocm7-pjrt==0.8.0+rocm7.13.0a20260421" \
+  "rocm[libraries]==7.13.0a20260421"
+uv pip install -e ./thrd_party/mj-grasp-sim -e .
+```
+
+The pip-installed ROCm SDK is missing two `rocm_sysdeps` libraries that the JAX plugin
+links against; `.rocm-shim/` contains symlinks to the system `libhwloc`/`libpciaccess`
+as stand-ins (recreate with `ln -sf /usr/lib/x86_64-linux-gnu/libhwloc.so.15
+.rocm-shim/librocm_sysdeps_hwloc.so.5` etc. if needed). `mise.toml` sets
+`LD_LIBRARY_PATH` accordingly; without mise export:
+
+```bash
+SP="$PWD/.venv/lib/python3.11/site-packages"
+export LD_LIBRARY_PATH="$PWD/.rocm-shim:$SP/_rocm_sdk_core/lib:$SP/_rocm_sdk_core/lib/rocm_sysdeps/lib:$SP/_rocm_sdk_libraries_gfx94X_dcgpu/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export MUJOCO_GL="egl"
+export JAX_COMPILATION_CACHE_DIR="$HOME/.jax_cache"   # first XLA compile takes ~5 min
+```
+
+Do not run `uv sync` afterwards — it would remove the ROCm plugin packages, which are
+installed imperatively (they are not in `pyproject.toml`).
+
+ROCm-specific notes:
+
+- **Train on a single GPU.** The full multi-embodiment model fits in one MI300X
+  (192 GB; verified ~2 s/step). Select a free GPU with e.g. `HIP_VISIBLE_DEVICES=2`
+  and set `XLA_PYTHON_CLIENT_MEM_FRACTION` to fit alongside co-tenant jobs.
+- **Multi-GPU `pmap` in one process is currently broken** on this stack:
+  concurrent rocBLAS use across device threads fails with
+  `rocblas_status_internal_error` (a sequential warmup in `train.py` moves but
+  does not eliminate the failure). Revisit after a ROCm/rocBLAS update.
+- On GPUs busy with other tenants, single-GPU runs may also hit the rocBLAS error;
+  `export ROCBLAS_USE_HIPBLASLT=1` worked around it in testing.
+- flax was bumped to 0.11.2 (jax 0.8 compatibility); `nnx.ModelAndOptimizer`
+  replaces `nnx.Optimizer` in `kin_flow/ctrl/trainer.py`, and
+  `TPWithWeightsAndBiases` (`kin_flow/net/module/fctp.py`) stores per-path
+  `nnx.Param`s — checkpoints written with the old Param-of-list layout would
+  need remapping.
+
 For the simulator download the object assets as described in https://github.com/boschresearch/mj-grasp-sim
 and place them under the directory `./thrd_party/mj-grasp-sim/asset/mj-objects/`. Make sure
 to also place the `fast_eta_objects.txt` in the same directory to select the proper

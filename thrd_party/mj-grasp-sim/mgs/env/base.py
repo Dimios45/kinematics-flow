@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
 from abc import abstractmethod
 from typing import Any, Protocol, Self
 
@@ -32,7 +33,13 @@ class MjScanEnv(MjSimulation):
     cy: float
 
     def __init__(self, camera_name: str, image_width: int, image_height):
-        self.renderer = mujoco.Renderer(self.model, width=480, height=480)
+        if os.environ.get("MGS_NO_RENDER"):
+            # headless node without any working GL backend (EGL segfaults, GLFW
+            # aborts): physics-only usage (kin_flow bench collision checks) never
+            # renders, so skip creating the GL context entirely
+            self.renderer = None
+        else:
+            self.renderer = mujoco.Renderer(self.model, width=480, height=480)
         self.width = image_width
         self.height = image_height
         cam_id = mujoco.mj_name2id(  # type: ignore

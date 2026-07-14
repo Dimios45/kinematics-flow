@@ -16,14 +16,18 @@
 
 import os
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".99"
+# respect an externally set fraction (needed on GPUs shared with other tenants)
+os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", ".99")
 import gc
+import glob
+import shutil
 import time
 
 import hydra
 import jax
 import jax.numpy as jnp
 import omegaconf
+import wandb
 from flax import nnx
 from omegaconf import DictConfig
 
@@ -38,6 +42,14 @@ from kin_flow.net.kinematics_flow import (KinematicsFlow,
 
 BATCH_SIZE = 128
 N_DEVICES = jax.local_device_count()
+
+# ROCm: warm up the BLAS library on each device sequentially before pmap runs
+# them concurrently — parallel first-use of rocBLAS across devices in one
+# process can fail with rocblas_status_internal_error.
+for _d in jax.local_devices():
+    _x = jax.device_put(jnp.ones((4, 32, 32)), _d)
+    jnp.einsum("bij,bjk->bik", _x, _x).block_until_ready()
+del _x, _d
 
 
 @hydra.main(config_path="config", config_name="train", version_base="1.2")
@@ -56,6 +68,12 @@ def train(cfg: DictConfig):
     if conf["debug_wo_encoding"]:
         net = KinematicsFlowWOEncoding(net, rngs=rngs)
 
+    wandb.init(
+        project=cfg.project_name,
+        name=f"{cfg.run_name}_{cfg.num_scenes}",
+        config={**conf, "BATCH_SIZE": BATCH_SIZE, "N_DEVICES": N_DEVICES},
+    )
+
     loss_fn, stat_fn = get_train_fn(cfg.algorithm.name)
     trainer = Trainer(
         net,
@@ -68,6 +86,47 @@ def train(cfg: DictConfig):
     key = jax.random.PRNGKey(0)
     train_counter = 0
     sample_stash = []
+
+    # resume from the newest rolling step-checkpoint if one exists (written every
+    # RESUME_EVERY_STEPS below; restores model + optimizer + LR-schedule step).
+    # The data loader restarts at a fresh shuffled epoch, which is fine.
+    resume_pattern = os.path.join(
+        CONST.MODEL_CHECKPOINT, f"{cfg.run_name}_{cfg.num_scenes}_resume_step*"
+    )
+
+    def _resume_step(path):
+        # dirs are named ..._resume_step<N> or ..._resume_step<N>_epoch<E>
+        return int(path.rsplit("step", 1)[1].split("_epoch")[0])
+
+    def _resume_epoch(path):
+        return int(path.rsplit("_epoch", 1)[1]) if "_epoch" in path else None
+
+    resume_dirs = sorted(glob.glob(resume_pattern), key=_resume_step)
+
+    RESUME_EVERY_STEPS = 1000
+    steps_per_epoch = max(1, cfg.num_scenes // cfg.num_scenes_per_batch)
+    start_epoch = 0
+    if resume_dirs:
+        latest = resume_dirs[-1]
+        trainer.restore(latest)
+        train_counter = _resume_step(latest)
+        resumed_epoch = _resume_epoch(latest)
+        # Prefer the epoch recorded in the checkpoint name itself: deriving it
+        # from train_counter // steps_per_epoch silently breaks if
+        # num_scenes_per_batch (and therefore steps_per_epoch) ever changed
+        # between when those steps were taken and now — train_counter is an
+        # absolute, never-reset counter, so old steps taken under a different
+        # batch size get misattributed to the new steps_per_epoch and inflate
+        # the epoch count (bit us once: 5->15 batch resume mislabeled epoch
+        # ~31 as epoch 91). Fall back to the derived value only for older
+        # checkpoints saved before this fix.
+        start_epoch = (
+            resumed_epoch if resumed_epoch is not None else train_counter // steps_per_epoch
+        )
+        print(
+            f"Resumed from {latest} (train step {train_counter}, epoch {start_epoch})",
+            flush=True,
+        )
 
     if conf["debug_wo_encoding"]:
         loader_list = get_gripper_loaders(
@@ -85,7 +144,7 @@ def train(cfg: DictConfig):
             rot_augmentation=cfg.rot_augmentation,
         )
 
-    for epoch in range(cfg.epochs):
+    for epoch in range(start_epoch, cfg.epochs):
         if (epoch + 1) % cfg.save_every_epoch == 0:
             save_dir = os.path.join(
                 CONST.MODEL_CHECKPOINT,
@@ -135,6 +194,26 @@ def train(cfg: DictConfig):
 
                 sample_stash.clear()
                 train_counter += 1
+
+                if (train_counter % RESUME_EVERY_STEPS) == 0:
+                    resume_dir = os.path.join(
+                        CONST.MODEL_CHECKPOINT,
+                        f"{cfg.run_name}_{cfg.num_scenes}_resume_step{train_counter}_epoch{epoch}",
+                    )
+                    trainer.save(resume_dir)
+                    for old in sorted(glob.glob(resume_pattern), key=_resume_step)[:-2]:
+                        shutil.rmtree(old, ignore_errors=True)
+                    gc.collect()
+
+                wandb.log(
+                    {
+                        "loss": float(loss),
+                        "epoch": epoch,
+                        "step_time": step_time,
+                        **{k: float(v) for k, v in aux.items()},
+                    },
+                    step=train_counter,
+                )
 
                 if (train_counter % 10) == 0:
                     print(f"Train Step: {step_time:.2f}s, Loss: {float(loss):.4f}")

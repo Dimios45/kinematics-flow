@@ -4,7 +4,7 @@
 debug_wo_encoding: false
 rot_augmentation: true
 num_scenes: 25000
-num_scenes_per_batch: 5 # make sure it is a multiple of the number of grippers (exclude z0 from the count)
+num_scenes_per_batch: 15 # must be a multiple of both num_grippers (5, exclude z0) and N_DEVICES (3)
 run_name: "me-full"
 project_name: "Full Model Integration"
 seed: 12345

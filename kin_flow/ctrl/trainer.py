@@ -117,7 +117,8 @@ class Trainer:
             end_value=train_cfg.end_lr,
         )
         tx = optax.adamw(learning_rate=lr_schedule)
-        self.optimizer = nnx.Optimizer(model, tx)
+        # flax>=0.11: nnx.Optimizer requires wrt; ModelAndOptimizer keeps the old semantics
+        self.optimizer = nnx.ModelAndOptimizer(model, tx)
         self.train_graph, self.train_state = nnx.split((self.model, self.optimizer))
 
         self.devices = jax.local_devices()
@@ -156,6 +157,14 @@ class Trainer:
         self.checkpointer.save(directory, state)
         self.checkpointer.wait_until_finished()
 
+    def restore(self, directory: str):
+        # inverse of save(): load pure dict into an unreplicated copy of the
+        # state (model + optimizer, incl. schedule step), then re-replicate
+        single_state = jax.tree_util.tree_map(lambda x: x[0], self.train_state)
+        state = self.checkpointer.restore(directory)
+        single_state.replace_by_pure_dict(state)  # type: ignore
+        self.train_state = jax.device_put_replicated(single_state, self.devices)
+
     @classmethod
     def get_model_from_checkpoint(cls, model, path):
 
@@ -167,10 +176,13 @@ class Trainer:
             end_value=0,
         )
         tx = optax.adamw(learning_rate=lr_schedule)
-        optimizer = nnx.Optimizer(model, tx)
+        optimizer = nnx.ModelAndOptimizer(model, tx)
         _train_graph, train_state = nnx.split((model, optimizer))
         checkpointer = ocp.StandardCheckpointer()
-        state = checkpointer.restore(path)
+        # pass an explicit target so Orbax remaps the checkpoint's saved device
+        # topology (e.g. 3-way sharded from multi-GPU training) onto whatever
+        # devices are available here, instead of replaying the original sharding.
+        state = checkpointer.restore(path, target=train_state.to_pure_dict())
         train_state.replace_by_pure_dict(state)  # type: ignore
         model, _opt = nnx.merge(_train_graph, train_state)
         return model

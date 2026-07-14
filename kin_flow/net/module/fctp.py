@@ -988,14 +988,16 @@ class TPWithWeightsAndBiases(nnx.Module):
             weight = jax.random.uniform(
                 rngs(), weight_shape, minval=-sqrt_k, maxval=sqrt_k
             )
-            weights.append(weight)
-        return nnx.Param(weights), biases
+            # one Param per path (like TPWithWeights): flax>=0.11 optimizers reject
+            # a single Param holding a Python list
+            weights.append(nnx.Param(weight))
+        return weights, biases
 
     def __call__(
         self, x: e3nn_jax.IrrepsArray, y: e3nn_jax.IrrepsArray
     ) -> e3nn_jax.IrrepsArray:
         out = self.tp.left_right(
-            weights=self.weights.value,
+            weights=[w.value for w in self.weights],
             input1=x,
             input2=y,
         )
